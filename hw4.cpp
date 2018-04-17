@@ -65,12 +65,19 @@ int main() {
 
             }
 
-            for (int j = 0; j < args.size(); j++) {
-                //cstrings[j] = const_cast<char*>(args[j].c_str());
-                //std::cout << "shitty code: " << j << " " << const_cast<char*>(args[j].c_str()) << std::endl;
-                cstrings[j] = (char*)malloc(100);
-                strcpy(cstrings[j], args[j].c_str());
-                std::cout << cstrings[j] << std::endl;
+            if (args.size() == 1) {
+                cstrings[0] = (char*)malloc(100);
+                strcpy(cstrings[0], args[0].c_str());
+                cstrings[1] = NULL;
+            }
+            else {
+                for (int j = 0; j < args.size(); j++) {
+                    //cstrings[j] = const_cast<char*>(args[j].c_str());
+                    //std::cout << "shitty code: " << j << " " << const_cast<char*>(args[j].c_str()) << std::endl;
+                    cstrings[j] = (char*)malloc(100);
+                    strcpy(cstrings[j], args[j].c_str());
+                    std::cout << cstrings[j] << std::endl;
+                }
             }
 
             pid_t pid = fork();
