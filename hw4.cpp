@@ -28,15 +28,18 @@ int main() {
         char *const environ_var[] = { NULL };
         std::cout << ">";
         std::getline(std::cin, line);
+        if (line == "")
+            exit(EXIT_SUCCESS);
 
-        //std::vector< std::vector<std::string> > commands = parse_line(line);
-        std::stringstream ss(line);
-        std::istream_iterator<std::string> begin(ss);
-        std::istream_iterator<std::string> end;
-        std::vector<std::string> vstrings(begin, end);
 
-        std::vector< std::vector<std::string> > commands;
-        commands.push_back(vstrings);
+        std::vector< std::vector<std::string> > commands = parse_line(line);
+//        std::stringstream ss(line);
+//        std::istream_iterator<std::string> begin(ss);
+//        std::istream_iterator<std::string> end;
+//        std::vector<std::string> vstrings(begin, end);
+//
+//        std::vector< std::vector<std::string> > commands;
+//        commands.push_back(vstrings);
         //end parse_line
 
         std::vector<std::string> args;
@@ -51,8 +54,11 @@ int main() {
         for (i = 0; i < commands.size(); i++) {
             std::vector<std::string> args(commands[i].begin(), commands[i].end());
             std::string command = commands[i][0];
+
+            if (command == "exit") 
+                exit(EXIT_SUCCESS);
             //std::vector<char*> cstrings;
-            char** cstrings = (char**)malloc(args.size()*8);
+            char** cstrings = (char**)malloc((args.size() + 1)*sizeof(char*));
             //cstrings.reserve(args.size());
             std::string filepath = "";
             if(command[0] != '/')
@@ -60,10 +66,10 @@ int main() {
             filepath += command;
             const char *filepath2 = filepath.c_str();
 
-            for (std::vector<std::string>::const_iterator i = args.begin(); i != args.end(); i++) {
-                std::cout << (*i).c_str() << std::endl;
+            //for (std::vector<std::string>::const_iterator i = args.begin(); i != args.end(); i++) {
+            //    std::cout << (*i).c_str() << std::endl;
 
-            }
+            //}
 
             if (args.size() == 1) {
                 cstrings[0] = (char*)malloc(100);
@@ -76,26 +82,28 @@ int main() {
                     //std::cout << "shitty code: " << j << " " << const_cast<char*>(args[j].c_str()) << std::endl;
                     cstrings[j] = (char*)malloc(100);
                     strcpy(cstrings[j], args[j].c_str());
-                    std::cout << cstrings[j] << std::endl;
                 }
+                cstrings[args.size()] = NULL;
             }
 
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
-                std::cout << "cstrings[1] = " << cstrings[1] << std::endl;
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
                 exit(EXIT_FAILURE);
             }
             else {
-                //cstrings.clear();
+                for (int k = 0; k < args.size(); k++) {
+                    free(cstrings[k]);
+                }
                 free(cstrings);
                 pids.push_back(pid);
             }
         }
         for (i = 0; i < commands.size(); i++) {
             waitpid(pids[i], &status, 0);
+            std::cerr << "Child finished with exit code: " <<  WEXITSTATUS(status) << std::endl;
             std::cout << "child " << i << " finished" << std::endl;
         }
 
@@ -109,6 +117,23 @@ std::vector< std::vector<std::string> > parse_line(std::string line) {
         std::istream_iterator<std::string> begin(ss);
         std::istream_iterator<std::string> end;
         std::vector<std::string> vstrings(begin, end);
+        std::vector<std::string>::iterator it; 
+
+//        regex_t reg;
+//        int regret;
+//        char regbuf[100];
+//        regret = regcomp(&reg, "^[a-zA-Z0-9_-/]+$", 0);
+
+        for (it = vstrings.begin(); it != vstrings.end(); it++) {
+            std::cout << "hey i've got this thing here: " << *it << std::endl;
+            //regret = regexec(&reg, "er$or", 0, NULL, 0);
+            //if(regret = REG_NOMATCH) {
+            //    std::cerr << "Invalid token in word: " << *it << std::endl;
+            //}
+            //else {
+            //    std::cout << "token was valid" << std::endl;
+            //}
+        }   
 
         std::vector< std::vector<std::string> > command_list;
         command_list.push_back(vstrings);
