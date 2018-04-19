@@ -2,6 +2,7 @@
 #include <iterator>
 #include <sstream>
 #include <stdio.h>
+#include <fcntl.h>
 #include <cstdio>
 #include <vector>
 #include <string>
@@ -33,7 +34,8 @@ int main() {
 
 
         std::vector<int*> pipevec;
-        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec);
+        std::vector<int*> filevec;
+        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec, &filevec);
         //std::cout << "PIPEVEC " << pipevec[0][0] << std::endl;
 //        std::stringstream ss(line);
 //        std::istream_iterator<std::string> begin(ss);
@@ -56,8 +58,23 @@ int main() {
             std::string command = commands[i][0];
             //std::cout << "command to be executed: " << command << std::endl;
 
+            bool is_fwrite = 0;
+            bool is_fread = 0;
+
             if (command == "exit") 
                 exit(EXIT_SUCCESS);
+
+            if (command == ">") {
+                is_fwrite = 1;
+                args.erase(args.begin());
+                command = args[0];
+            }
+
+            if (command == "<") {
+                is_fread = 1;
+                args.erase(args.begin());
+                command = args[0];
+            }
             //std::vector<char*> cstrings;
             char** cstrings = (char**)malloc((args.size() + 1)*sizeof(char*));
             //cstrings.reserve(args.size());
@@ -90,13 +107,24 @@ int main() {
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
+                if (filevec[i] != NULL) {
+                    dup2(*(filevec[i]), STDOUT_FILENO);
+                }
+                else {
                 if( i < pipevec.size() ) {
-                    int *pipeinfo = pipevec[i];
-                    dup2(pipeinfo[1], STDOUT_FILENO);
+                    if (pipevec[i] != NULL) {
+                        int *pipeinfo = pipevec[i];
+                        close(pipeinfo[0]);
+                        dup2(pipeinfo[1], STDOUT_FILENO);
+                        close(pipeinfo[1]);
+                    }
                 }
                 if(i != 0 && pipevec.size() > 0) {
                     int *prevpipeinfo = pipevec[i-1];
+                    close(prevpipeinfo[1]);
                     dup2(prevpipeinfo[0], STDIN_FILENO);
+                    close(prevpipeinfo[0]);
+                }
                 }
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
@@ -108,8 +136,9 @@ int main() {
                 }
                 free(cstrings);
                 pids.push_back(pid);
-                if (i < commands.size() - 1)
+                if ((i < commands.size() - 1) && pipevec[i] != NULL) {
                     close(pipevec[i][1]);
+                }
             }
         }
         for (i = 0; i < commands.size(); i++) {
@@ -129,7 +158,7 @@ int main() {
 }
 
 
-std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec) {
+std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, std::vector<int*> *filevec) {
         std::stringstream ss(line);
         std::istream_iterator<std::string> begin(ss);
         std::istream_iterator<std::string> end;
@@ -156,8 +185,28 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 int *pipefd = (int*)malloc(2*sizeof(int));
                 pipe(pipefd);
                 (*pipevec).push_back(pipefd);
+                (*filevec).push_back(NULL);
                 //std::cout << "temp : " << temp.size() << std::endl;
                 //break;
+            }
+            else if (*it == ">") {
+                command_list.push_back(temp);
+                temp.clear();
+
+                it++;
+                std::string file_to_open = *(it);
+                std::string filepath = "";
+                char *cwd_cstr = getcwd(NULL, 0);
+                std::string cwd(cwd_cstr);
+                if (file_to_open[0] != '/') {
+                    filepath += cwd;
+                    filepath += "/";
+                }
+                filepath += file_to_open;
+                int *fd = (int*) malloc(sizeof(int));
+                *fd = open(filepath.c_str(), O_CREAT);
+                (*filevec).push_back(fd);
+                (*pipevec).push_back(NULL);
             }
             else {
                 //std::cout << "pushing back " << *it << " to temp" << std::endl;
