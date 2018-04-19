@@ -32,7 +32,9 @@ int main() {
             exit(EXIT_SUCCESS);
 
 
-        std::vector< std::vector<std::string> > commands = parse_line(line);
+        std::vector<int*> pipevec;
+        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec);
+        //std::cout << "PIPEVEC " << pipevec[0][0] << std::endl;
 //        std::stringstream ss(line);
 //        std::istream_iterator<std::string> begin(ss);
 //        std::istream_iterator<std::string> end;
@@ -46,14 +48,13 @@ int main() {
         
         std::vector<pid_t> pids;
 
-        int fildes[2];
-        int piperet = pipe(fildes);
         int status;
         
         // for each command in the input
         for (i = 0; i < commands.size(); i++) {
             std::vector<std::string> args(commands[i].begin(), commands[i].end());
             std::string command = commands[i][0];
+            //std::cout << "command to be executed: " << command << std::endl;
 
             if (command == "exit") 
                 exit(EXIT_SUCCESS);
@@ -89,6 +90,14 @@ int main() {
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
+                if( i < pipevec.size() ) {
+                    int *pipeinfo = pipevec[i];
+                    dup2(pipeinfo[1], STDOUT_FILENO);
+                }
+                if(i != 0 && pipevec.size() > 0) {
+                    int *prevpipeinfo = pipevec[i-1];
+                    dup2(prevpipeinfo[0], STDIN_FILENO);
+                }
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
                 exit(EXIT_FAILURE);
@@ -99,12 +108,20 @@ int main() {
                 }
                 free(cstrings);
                 pids.push_back(pid);
+                if (i < commands.size() - 1)
+                    close(pipevec[i][1]);
             }
         }
         for (i = 0; i < commands.size(); i++) {
+            if (i < commands.size() - 1)
+                close(pipevec[i][1]);
             waitpid(pids[i], &status, 0);
+            //if (i != 0)
+            //    close(pipevec[i][0]);
+            //if (i != commands.size() - 1)
+            //    close(pipevec[i][1]);
             std::cerr << "Child finished with exit code: " <<  WEXITSTATUS(status) << std::endl;
-            std::cout << "child " << i << " finished" << std::endl;
+            //std::cout << "child " << i << " finished" << std::endl;
         }
 
         
@@ -112,20 +129,40 @@ int main() {
 }
 
 
-std::vector< std::vector<std::string> > parse_line(std::string line) {
+std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec) {
         std::stringstream ss(line);
         std::istream_iterator<std::string> begin(ss);
         std::istream_iterator<std::string> end;
         std::vector<std::string> vstrings(begin, end);
         std::vector<std::string>::iterator it; 
+        std::vector< std::vector<std::string> > command_list;
 
 //        regex_t reg;
 //        int regret;
 //        char regbuf[100];
 //        regret = regcomp(&reg, "^[a-zA-Z0-9_-/]+$", 0);
 
-        for (it = vstrings.begin(); it != vstrings.end(); it++) {
-            std::cout << "hey i've got this thing here: " << *it << std::endl;
+        std::vector<std::string> temp;
+        for (it = vstrings.begin();; it++) {
+            //std::cout << "hey i've got this thing here: " << *it << std::endl;
+            if (it == vstrings.end()) {
+                command_list.push_back(temp);
+                break;
+            }
+            if (*it == "|") {
+                command_list.push_back(temp);
+                temp.clear();
+
+                int *pipefd = (int*)malloc(2*sizeof(int));
+                pipe(pipefd);
+                (*pipevec).push_back(pipefd);
+                //std::cout << "temp : " << temp.size() << std::endl;
+                //break;
+            }
+            else {
+                //std::cout << "pushing back " << *it << " to temp" << std::endl;
+                temp.push_back(*it);
+            }
             //regret = regexec(&reg, "er$or", 0, NULL, 0);
             //if(regret = REG_NOMATCH) {
             //    std::cerr << "Invalid token in word: " << *it << std::endl;
@@ -135,7 +172,6 @@ std::vector< std::vector<std::string> > parse_line(std::string line) {
             //}
         }   
 
-        std::vector< std::vector<std::string> > command_list;
-        command_list.push_back(vstrings);
+        //command_list.push_back(vstrings);
         return command_list;
 }
