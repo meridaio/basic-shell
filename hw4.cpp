@@ -88,7 +88,7 @@ int main() {
                         //file is open for writing from stdout
                         dup2(pipevec[i][3], STDOUT_FILENO);
                     }
-                    else if (pipevec[i][2] != -1) {
+                    if (pipevec[i][2] != -1) {
                         //file is open for reading from stdin
                         dup2(pipevec[i][2], STDIN_FILENO);
                     }
@@ -237,6 +237,7 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
 int validate_input(std::vector<std::string> input) {
     std::vector<std::string>::iterator it; 
     int is_command = 1;
+    int is_first_token = 1;
     int is_fileout = 0;
     int is_filein = 0;
     int seen_filename = 0;
@@ -262,6 +263,8 @@ int validate_input(std::vector<std::string> input) {
                 //seen_filename = 0;
             }
             if (*it == "<") {
+                if (!is_first_token)
+                    return 2;
                 is_filein = 1;
                 //seen_filename = 0;
             }
@@ -271,6 +274,7 @@ int validate_input(std::vector<std::string> input) {
                 is_command = 1;
                 prev_was_pipe = 1;
                 seen_filename = 0;
+                is_first_token = 0;
             }
             continue;
         }
