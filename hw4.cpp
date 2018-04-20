@@ -238,6 +238,8 @@ int validate_input(std::vector<std::string> input) {
     std::vector<std::string>::iterator it; 
     int is_command = 1;
     int is_fileout = 0;
+    int is_filein = 0;
+    int seen_filename = 0;
     int prev_was_token = 0;
     int prev_was_pipe = 0;
     for (it = input.begin(); it != input.end(); it++) {
@@ -255,18 +257,31 @@ int validate_input(std::vector<std::string> input) {
             prev_was_token = 1;
             if (*it == ">") {
                 is_fileout = 1;
-                prev_was_pipe = 0;
+                //program hangs if < and > are used on the same command, these
+                //seen_filename statements would be uncommented if it worked
+                //seen_filename = 0;
+            }
+            if (*it == "<") {
+                is_filein = 1;
+                //seen_filename = 0;
             }
             if (*it == "|") {
                 if(is_fileout) 
                     return 2;
                 is_command = 1;
                 prev_was_pipe = 1;
+                seen_filename = 0;
             }
             continue;
         }
         prev_was_pipe = 0;
         prev_was_token = 0;
+
+        if (is_fileout || is_filein) {
+            if(seen_filename)
+                return 2;
+            seen_filename = 1;
+        }
         
         //if the word is a command, make sure that it doesn't contain any invalid tokens
         if ((*it).find_first_not_of("-/._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos){
