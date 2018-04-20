@@ -35,7 +35,13 @@ int main() {
 
         std::vector<int*> pipevec;
         std::vector<int*> filevec;
-        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec, &filevec);
+        std::vector<int*> readvec;
+        filevec.reserve(1);
+        readvec.reserve(1);
+        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec, &filevec, &readvec);
+        std::cout << "pipevec size: " << pipevec.size() << std::endl;
+        std::cout << "filevec size: " << filevec.size() << std::endl;
+        std::cout << "readvec size: " << readvec.size() << std::endl;
         //std::cout << "PIPEVEC " << pipevec[0][0] << std::endl;
 //        std::stringstream ss(line);
 //        std::istream_iterator<std::string> begin(ss);
@@ -84,8 +90,8 @@ int main() {
             filepath += command;
             const char *filepath2 = filepath.c_str();
 
-            //for (std::vector<std::string>::const_iterator i = args.begin(); i != args.end(); i++) {
-            //    std::cout << (*i).c_str() << std::endl;
+            //for (std::vector<std::string>::const_iterator iter = args.begin(); iter != args.end(); iter++) {
+            //    std::cout << (*iter).c_str() << std::endl;
 
             //}
 
@@ -104,15 +110,20 @@ int main() {
                 cstrings[args.size()] = NULL;
             }
 
+            //std::cout << (filevec[i]) << std::endl;
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
-                if (filevec[i] != NULL) {
-                    dup2(*(filevec[i]), STDOUT_FILENO);
-                }
-                else {
-                if( i < pipevec.size() ) {
-                    if (pipevec[i] != NULL) {
+                //std::cout << *(filevec[i]) << std::endl;
+                    //std::cout << "i!=0" << std::endl;
+                if( i < pipevec.size() && pipevec[i] != NULL) {
+                    if (pipevec[i][3] != -1) {
+                        dup2(pipevec[i][3], STDOUT_FILENO);
+                    }
+                    else if (pipevec[i][2] != -1) {
+                        dup2(pipevec[i][2], STDIN_FILENO);
+                    }
+                    if (pipevec[i][0] != -1) {
                         int *pipeinfo = pipevec[i];
                         close(pipeinfo[0]);
                         dup2(pipeinfo[1], STDOUT_FILENO);
@@ -125,7 +136,7 @@ int main() {
                     dup2(prevpipeinfo[0], STDIN_FILENO);
                     close(prevpipeinfo[0]);
                 }
-                }
+                std::cout << "execing " << i << std::endl;
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
                 exit(EXIT_FAILURE);
@@ -158,7 +169,7 @@ int main() {
 }
 
 
-std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, std::vector<int*> *filevec) {
+std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, std::vector<int*> *filevec, std::vector<int*> *readvec) {
         std::stringstream ss(line);
         std::istream_iterator<std::string> begin(ss);
         std::istream_iterator<std::string> end;
@@ -170,28 +181,42 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
 //        int regret;
 //        char regbuf[100];
 //        regret = regcomp(&reg, "^[a-zA-Z0-9_-/]+$", 0);
+        int *fd = (int*)malloc(4*sizeof(int));
+        fd[0] = -1;
+        fd[1] = -1;
+        fd[2] = -1;
+        fd[3] = -1;
 
         std::vector<std::string> temp;
         for (it = vstrings.begin();; it++) {
             //std::cout << "hey i've got this thing here: " << *it << std::endl;
             if (it == vstrings.end()) {
                 command_list.push_back(temp);
+                std::cout << fd[0] << fd[1] << fd[2] << fd[3] << std::endl;
+                if(fd[0] != -1 || fd[1] != -1 || fd[2] != -1 || fd[3] != -1)
+                    pipevec->push_back(fd);
                 break;
             }
             if (*it == "|") {
                 command_list.push_back(temp);
                 temp.clear();
 
-                int *pipefd = (int*)malloc(2*sizeof(int));
-                pipe(pipefd);
-                (*pipevec).push_back(pipefd);
-                (*filevec).push_back(NULL);
+                pipe(fd);
+                (*pipevec).push_back(fd);
+                fd = (int*)malloc(4*sizeof(int));
+                fd[0] = -1;
+                fd[1] = -1;
+                fd[2] = -1;
+                fd[3] = -1;
+
+                //(*filevec).push_back(NULL);
+                //(*readvec).push_back(NULL);
                 //std::cout << "temp : " << temp.size() << std::endl;
                 //break;
             }
             else if (*it == ">") {
-                command_list.push_back(temp);
-                temp.clear();
+                //command_list.push_back(temp);
+                //temp.clear();
 
                 it++;
                 std::string file_to_open = *(it);
@@ -203,10 +228,27 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                     filepath += "/";
                 }
                 filepath += file_to_open;
-                int *fd = (int*) malloc(sizeof(int));
-                *fd = open(filepath.c_str(), O_CREAT);
-                (*filevec).push_back(fd);
-                (*pipevec).push_back(NULL);
+                fd[3] = open(filepath.c_str(), O_CREAT|O_RDWR, 00644);
+                fd[2] = -1;
+                //(*filevec).push_back(fd);
+                //(*readvec).push_back(NULL);
+            }
+            else if (*it == "<") {
+                it++;
+                std::string file_to_open = *(it);
+                std::string filepath = "";
+                char *cwd_cstr = getcwd(NULL, 0);
+                std::string cwd(cwd_cstr);
+                if (file_to_open[0] != '/') {
+                    filepath += cwd;
+                    filepath += "/";
+                }
+                filepath += file_to_open;
+                //int *fd = (int*) malloc(2*sizeof(int));
+                fd[2] = open(filepath.c_str(), O_RDONLY);
+                fd[3] = -1;
+                //(*readvec).push_back(fd);
+                //(*filevec).push_back(NULL);
             }
             else {
                 //std::cout << "pushing back " << *it << " to temp" << std::endl;
