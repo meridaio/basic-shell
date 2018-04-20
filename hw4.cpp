@@ -34,14 +34,15 @@ int main() {
 
 
         std::vector<int*> pipevec;
-        std::vector<int*> filevec;
-        std::vector<int*> readvec;
-        filevec.reserve(1);
-        readvec.reserve(1);
-        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec, &filevec, &readvec);
-        std::cout << "pipevec size: " << pipevec.size() << std::endl;
-        std::cout << "filevec size: " << filevec.size() << std::endl;
-        std::cout << "readvec size: " << readvec.size() << std::endl;
+        int valid;
+        std::vector< std::vector<std::string> > commands = parse_line(line, &pipevec, &valid);
+        if (valid) {
+            std::cout << "invalid input." << std::endl;
+            continue;
+        }
+        //std::cout << "pipevec size: " << pipevec.size() << std::endl;
+        //std::cout << "filevec size: " << filevec.size() << std::endl;
+        //std::cout << "readvec size: " << readvec.size() << std::endl;
         //std::cout << "PIPEVEC " << pipevec[0][0] << std::endl;
 //        std::stringstream ss(line);
 //        std::istream_iterator<std::string> begin(ss);
@@ -136,7 +137,7 @@ int main() {
                     dup2(prevpipeinfo[0], STDIN_FILENO);
                     close(prevpipeinfo[0]);
                 }
-                std::cout << "execing " << i << std::endl;
+                //std::cout << "execing " << i << std::endl;
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
                 exit(EXIT_FAILURE);
@@ -169,13 +170,18 @@ int main() {
 }
 
 
-std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, std::vector<int*> *filevec, std::vector<int*> *readvec) {
+std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, int *valid) {
         std::stringstream ss(line);
         std::istream_iterator<std::string> begin(ss);
         std::istream_iterator<std::string> end;
         std::vector<std::string> vstrings(begin, end);
         std::vector<std::string>::iterator it; 
         std::vector< std::vector<std::string> > command_list;
+        //std::cout << "Validate input: " << validate_input(vstrings) << std::endl;
+        *valid = validate_input(vstrings);
+        if (*valid) {
+            return command_list;
+        }
 
 //        regex_t reg;
 //        int regret;
@@ -192,7 +198,7 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
             //std::cout << "hey i've got this thing here: " << *it << std::endl;
             if (it == vstrings.end()) {
                 command_list.push_back(temp);
-                std::cout << fd[0] << fd[1] << fd[2] << fd[3] << std::endl;
+                //std::cout << fd[0] << fd[1] << fd[2] << fd[3] << std::endl;
                 if(fd[0] != -1 || fd[1] != -1 || fd[2] != -1 || fd[3] != -1)
                     pipevec->push_back(fd);
                 break;
@@ -265,4 +271,52 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
 
         //command_list.push_back(vstrings);
         return command_list;
+}
+
+//1 = invalid character in input
+//2 = invalid input sequence
+//3 = no program supplied to pipe
+int validate_input(std::vector<std::string> input) {
+    std::vector<std::string>::iterator it; 
+    int is_command = 1;
+    int is_fileout = 0;
+    int prev_was_token = 0;
+    int prev_was_pipe = 0;
+    for (it = input.begin(); it != input.end(); it++) {
+
+        //first basic check for any invalid characters
+        if ((*it).find_first_not_of("-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ |/.><") != std::string::npos) {
+            return 1;
+        }
+        //if the word is a token, make sure that it is in a valid place
+        if (*it == "|" || *it == ">" || *it == "<") {
+            if (is_command)
+                return 2;
+            if (prev_was_token)
+                return 2;
+            prev_was_token = 1;
+            if (*it == ">") {
+                is_fileout = 1;
+                prev_was_pipe = 0;
+            }
+            if (*it == "|") {
+                if(is_fileout) 
+                    return 2;
+                is_command = 1;
+                prev_was_pipe = 1;
+            }
+            continue;
+        }
+        prev_was_pipe = 0;
+        prev_was_token = 0;
+        
+        //if the word is a command, make sure that it doesn't contain any invalid tokens
+        if ((*it).find_first_not_of("-/._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos){
+            return 1;
+        }
+        is_command = 0;
+    }
+    if (prev_was_token)
+        return 3;
+    return 0;
 }
