@@ -112,12 +112,16 @@ int main() {
             }
 
             //std::cout << (filevec[i]) << std::endl;
+             //       std::cout << pipevec[0][3] << pipevec[0][2] << std::endl;
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
                 //std::cout << *(filevec[i]) << std::endl;
                     //std::cout << "i!=0" << std::endl;
                 if( i < pipevec.size() && pipevec[i] != NULL) {
+                    if (pipevec[i][3] == -2 || pipevec[i][2] == -2) {
+                        exit(EXIT_FAILURE);
+                    }
                     if (pipevec[i][3] != -1) {
                         dup2(pipevec[i][3], STDOUT_FILENO);
                     }
@@ -183,10 +187,9 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
             return command_list;
         }
 
-//        regex_t reg;
-//        int regret;
-//        char regbuf[100];
-//        regret = regcomp(&reg, "^[a-zA-Z0-9_-/]+$", 0);
+        //a file descriptor array consisting of 4 integers. fd[0] and fd[1] refer to the in
+        //and out file descriptors (respectively) of the pipe. fd[2] refers to file in,
+        //fd[3] refers to file out. -1 means the file descriptor does not exist.
         int *fd = (int*)malloc(4*sizeof(int));
         fd[0] = -1;
         fd[1] = -1;
@@ -195,10 +198,8 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
 
         std::vector<std::string> temp;
         for (it = vstrings.begin();; it++) {
-            //std::cout << "hey i've got this thing here: " << *it << std::endl;
             if (it == vstrings.end()) {
                 command_list.push_back(temp);
-                //std::cout << fd[0] << fd[1] << fd[2] << fd[3] << std::endl;
                 if(fd[0] != -1 || fd[1] != -1 || fd[2] != -1 || fd[3] != -1)
                     pipevec->push_back(fd);
                 break;
@@ -215,15 +216,8 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 fd[2] = -1;
                 fd[3] = -1;
 
-                //(*filevec).push_back(NULL);
-                //(*readvec).push_back(NULL);
-                //std::cout << "temp : " << temp.size() << std::endl;
-                //break;
             }
             else if (*it == ">") {
-                //command_list.push_back(temp);
-                //temp.clear();
-
                 it++;
                 std::string file_to_open = *(it);
                 std::string filepath = "";
@@ -235,9 +229,13 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 }
                 filepath += file_to_open;
                 fd[3] = open(filepath.c_str(), O_CREAT|O_RDWR, 00644);
+                //if fd[3] is 0, open failed. -1 is what we use to describe a nonexistant 
+                //file descriptor, so change it to -2 on failure.
+                if (fd[3] == -1) {
+                    std::cout << "unable to open file for writing" << std::endl;
+                    fd[3] = -2;
+                }
                 fd[2] = -1;
-                //(*filevec).push_back(fd);
-                //(*readvec).push_back(NULL);
             }
             else if (*it == "<") {
                 it++;
@@ -252,6 +250,11 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 filepath += file_to_open;
                 //int *fd = (int*) malloc(2*sizeof(int));
                 fd[2] = open(filepath.c_str(), O_RDONLY);
+                //std::cout << fd[2] << std::endl;
+                if (fd[2] == -1) {
+                    std::cout << "unable to open file for reading" << std::endl;
+                    fd[2] = -2;
+                }
                 fd[3] = -1;
                 //(*readvec).push_back(fd);
                 //(*filevec).push_back(NULL);
@@ -260,13 +263,6 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 //std::cout << "pushing back " << *it << " to temp" << std::endl;
                 temp.push_back(*it);
             }
-            //regret = regexec(&reg, "er$or", 0, NULL, 0);
-            //if(regret = REG_NOMATCH) {
-            //    std::cerr << "Invalid token in word: " << *it << std::endl;
-            //}
-            //else {
-            //    std::cout << "token was valid" << std::endl;
-            //}
         }   
 
         //command_list.push_back(vstrings);
