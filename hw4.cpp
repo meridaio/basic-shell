@@ -1,3 +1,8 @@
+//Nathaniel George - ntg9vz
+//4-20-2018
+//Written for hw4: shell
+
+
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -10,7 +15,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <regex.h>
 #include "hw4.h"
 
 
@@ -20,18 +24,20 @@ int main() {
     std::string line;
     char *cwd_cstr = getcwd(NULL, 0);
     std::string cwd(cwd_cstr);
-    //std::string teststr = "ls";
-    //std::vector<char> char_array(teststr.begin(), teststr.end());
-    //char *const test_args[] = {&char_array[0]};
 
     while(1) {
-        // our prompt
+        //if this shell supported environment variables, they would go here :)
         char *const environ_var[] = { NULL };
+        // our prompt
         std::cout << ">";
         std::getline(std::cin, line);
+        //if we recieve a blank line or an EOF, exit shell
         if (line == "")
             exit(EXIT_SUCCESS);
-
+        if (line.size() > 100) {
+            std::cout << "line is too long." << std::endl;
+            continue;
+        }
 
         std::vector<int*> pipevec;
         int valid;
@@ -40,18 +46,6 @@ int main() {
             std::cout << "invalid input." << std::endl;
             continue;
         }
-        //std::cout << "pipevec size: " << pipevec.size() << std::endl;
-        //std::cout << "filevec size: " << filevec.size() << std::endl;
-        //std::cout << "readvec size: " << readvec.size() << std::endl;
-        //std::cout << "PIPEVEC " << pipevec[0][0] << std::endl;
-//        std::stringstream ss(line);
-//        std::istream_iterator<std::string> begin(ss);
-//        std::istream_iterator<std::string> end;
-//        std::vector<std::string> vstrings(begin, end);
-//
-//        std::vector< std::vector<std::string> > commands;
-//        commands.push_back(vstrings);
-        //end parse_line
 
         std::vector<std::string> args;
         
@@ -63,85 +57,56 @@ int main() {
         for (i = 0; i < commands.size(); i++) {
             std::vector<std::string> args(commands[i].begin(), commands[i].end());
             std::string command = commands[i][0];
-            //std::cout << "command to be executed: " << command << std::endl;
-
-            bool is_fwrite = 0;
-            bool is_fread = 0;
 
             if (command == "exit") 
                 exit(EXIT_SUCCESS);
 
-            if (command == ">") {
-                is_fwrite = 1;
-                args.erase(args.begin());
-                command = args[0];
-            }
-
-            if (command == "<") {
-                is_fread = 1;
-                args.erase(args.begin());
-                command = args[0];
-            }
-            //std::vector<char*> cstrings;
             char** cstrings = (char**)malloc((args.size() + 1)*sizeof(char*));
-            //cstrings.reserve(args.size());
             std::string filepath = "";
             if(command[0] != '/')
                 filepath += cwd;
             filepath += command;
             const char *filepath2 = filepath.c_str();
 
-            //for (std::vector<std::string>::const_iterator iter = args.begin(); iter != args.end(); iter++) {
-            //    std::cout << (*iter).c_str() << std::endl;
-
-            //}
-
-            if (args.size() == 1) {
-                cstrings[0] = (char*)malloc(100);
-                strcpy(cstrings[0], args[0].c_str());
-                cstrings[1] = NULL;
+            //malloc and copy in each argument as a string.
+            //the last string in the array passed to exec() must be NULL
+            for (int j = 0; j < args.size(); j++) {
+                cstrings[j] = (char*)malloc(100);
+                strcpy(cstrings[j], args[j].c_str());
             }
-            else {
-                for (int j = 0; j < args.size(); j++) {
-                    //cstrings[j] = const_cast<char*>(args[j].c_str());
-                    //std::cout << "shitty code: " << j << " " << const_cast<char*>(args[j].c_str()) << std::endl;
-                    cstrings[j] = (char*)malloc(100);
-                    strcpy(cstrings[j], args[j].c_str());
-                }
-                cstrings[args.size()] = NULL;
-            }
+            cstrings[args.size()] = NULL;
 
-            //std::cout << (filevec[i]) << std::endl;
-             //       std::cout << pipevec[0][3] << pipevec[0][2] << std::endl;
             pid_t pid = fork();
             if (pid == 0) {
                 //do redirection stuff
-                //std::cout << *(filevec[i]) << std::endl;
-                    //std::cout << "i!=0" << std::endl;
                 if( i < pipevec.size() && pipevec[i] != NULL) {
                     if (pipevec[i][3] == -2 || pipevec[i][2] == -2) {
+                        //unable to open a file for reading or writing
                         exit(EXIT_FAILURE);
                     }
                     if (pipevec[i][3] != -1) {
+                        //file is open for writing from stdout
                         dup2(pipevec[i][3], STDOUT_FILENO);
                     }
                     else if (pipevec[i][2] != -1) {
+                        //file is open for reading from stdin
                         dup2(pipevec[i][2], STDIN_FILENO);
                     }
                     if (pipevec[i][0] != -1) {
+                        //a pipe is open to pipe to another command
                         int *pipeinfo = pipevec[i];
                         close(pipeinfo[0]);
                         dup2(pipeinfo[1], STDOUT_FILENO);
                         close(pipeinfo[1]);
                     }
                 }
+                //get the input file descriptor from the previous command's pipe info
                 if(i != 0 && pipevec.size() > 0) {
                     int *prevpipeinfo = pipevec[i-1];
                     close(prevpipeinfo[1]);
                     dup2(prevpipeinfo[0], STDIN_FILENO);
                     close(prevpipeinfo[0]);
                 }
-                //std::cout << "execing " << i << std::endl;
                 execve(filepath2, cstrings, environ_var);
                 perror("execve");
                 exit(EXIT_FAILURE);
@@ -161,19 +126,17 @@ int main() {
             if (i < commands.size() - 1)
                 close(pipevec[i][1]);
             waitpid(pids[i], &status, 0);
-            //if (i != 0)
-            //    close(pipevec[i][0]);
-            //if (i != commands.size() - 1)
-            //    close(pipevec[i][1]);
             std::cerr << "Child finished with exit code: " <<  WEXITSTATUS(status) << std::endl;
-            //std::cout << "child " << i << " finished" << std::endl;
         }
 
         
     }
 }
 
-
+//takes a string as input and returns a vector of vectors. Each vector represents a single command
+//separated by a pipe, and each string in the vectors represents a word separated by a space.
+//if the input is not valid, the method returns a null vector and the int valid is set to indicate 
+//that the input was not valid.
 std::vector< std::vector<std::string> > parse_line(std::string line, std::vector<int*> *pipevec, int *valid) {
         std::stringstream ss(line);
         std::istream_iterator<std::string> begin(ss);
@@ -181,7 +144,7 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
         std::vector<std::string> vstrings(begin, end);
         std::vector<std::string>::iterator it; 
         std::vector< std::vector<std::string> > command_list;
-        //std::cout << "Validate input: " << validate_input(vstrings) << std::endl;
+
         *valid = validate_input(vstrings);
         if (*valid) {
             return command_list;
@@ -196,6 +159,7 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
         fd[2] = -1;
         fd[3] = -1;
 
+        //temp is where we construct a single command.
         std::vector<std::string> temp;
         for (it = vstrings.begin();; it++) {
             if (it == vstrings.end()) {
@@ -205,11 +169,15 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                 break;
             }
             if (*it == "|") {
+                //we can push back temp and then clear it because c++ automatically
+                //passes in a copy of temp, rather than the object itself
+                //isn't c++ great? :)
                 command_list.push_back(temp);
                 temp.clear();
 
                 pipe(fd);
                 (*pipevec).push_back(fd);
+                //reset our fd variable now that we are dealing with a new command
                 fd = (int*)malloc(4*sizeof(int));
                 fd[0] = -1;
                 fd[1] = -1;
@@ -248,24 +216,18 @@ std::vector< std::vector<std::string> > parse_line(std::string line, std::vector
                     filepath += "/";
                 }
                 filepath += file_to_open;
-                //int *fd = (int*) malloc(2*sizeof(int));
                 fd[2] = open(filepath.c_str(), O_RDONLY);
-                //std::cout << fd[2] << std::endl;
                 if (fd[2] == -1) {
                     std::cout << "unable to open file for reading" << std::endl;
                     fd[2] = -2;
                 }
                 fd[3] = -1;
-                //(*readvec).push_back(fd);
-                //(*filevec).push_back(NULL);
             }
             else {
-                //std::cout << "pushing back " << *it << " to temp" << std::endl;
                 temp.push_back(*it);
             }
         }   
 
-        //command_list.push_back(vstrings);
         return command_list;
 }
 
@@ -312,7 +274,9 @@ int validate_input(std::vector<std::string> input) {
         }
         is_command = 0;
     }
+    //if the last word is a token
     if (prev_was_token)
         return 3;
+    //we passed all the checks, and return the success code 0
     return 0;
 }
